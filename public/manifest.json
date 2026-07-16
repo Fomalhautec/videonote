@@ -1,0 +1,12 @@
+{
+  "name": "VideoNote",
+  "short_name": "VideoNote",
+  "description": "笔记应用 - 支持Bilibili视频笔记",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f0f1a",
+  "theme_color": "#6c5ce7",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

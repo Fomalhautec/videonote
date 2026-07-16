@@ -1,0 +1,12 @@
+node_modules/
+dist/
+dist-electron/
+release/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+.capacitor/
+*.log
+.DS_Store
+Thumbs.db
