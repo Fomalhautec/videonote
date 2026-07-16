@@ -278,30 +278,67 @@ ${bodyHtml}
   const exportAsDocx = async () => {
     if (!note) return;
     const api = window.electronAPI;
-    if (!api) {
-      // Web mode — DOCX export is unavailable
-      setExportDone('Web 模式不支持');
-      return;
-    }
-    setExporting(true);
-    try {
-      const result = await api.showSaveDialog({
-        defaultName: `${note.title || '笔记'}.docx`,
-        filters: [{ name: 'Word Document', extensions: ['docx'] }],
-      });
-      if (!result.canceled && result.filePath) {
-        await api.exportDocx({
-          title: note.title,
-          content: note.content,
-          filePath: result.filePath,
+    if (api) {
+      // Electron mode: use main process
+      setExporting(true);
+      try {
+        const result = await api.showSaveDialog({
+          defaultName: `${note.title || '笔记'}.docx`,
+          filters: [{ name: 'Word Document', extensions: ['docx'] }],
         });
-        setExportDone('Word');
+        if (!result.canceled && result.filePath) {
+          await api.exportDocx({ title: note.title, content: note.content, filePath: result.filePath });
+          setExportDone('Word');
+        }
+      } catch (e) {
+        console.error('DOCX export failed:', e);
+        setExportDone('导出失败');
+      } finally {
+        setExporting(false);
       }
-    } catch (e) {
-      console.error('DOCX export failed:', e);
-      setExportDone('导出失败');
-    } finally {
-      setExporting(false);
+    } else {
+      // Web / Capacitor mode: try docx library, fallback to HTML-based .doc
+      setExporting(true);
+      try {
+        let blob: Blob;
+        try {
+          const docxModule = await import('docx');
+          const { Document, Packer, Paragraph, TextRun, HeadingLevel, BorderStyle } = docxModule;
+          const lines = note.content.split('\n');
+          const children: any[] = [new Paragraph({ text: note.title, heading: HeadingLevel.HEADING_1, spacing: { after: 400 } })];
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (line.startsWith('```')) {
+              const codeLines: string[] = []; i++;
+              while (i < lines.length && !lines[i].startsWith('```')) { codeLines.push(lines[i]); i++; }
+              children.push(new Paragraph({ spacing: { before: 200, after: 200 }, border: { top: { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' }, bottom: { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' }, left: { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' }, right: { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' } }, shading: { type: 'clear', fill: 'F5F5F5' }, children: codeLines.map((cl: string) => new TextRun({ text: cl, font: 'Courier New', size: 18, break: 1 })) }));
+              continue;
+            }
+            if (line.startsWith('# ')) children.push(new Paragraph({ text: line.slice(2), heading: HeadingLevel.HEADING_1, spacing: { before: 300, after: 200 } }));
+            else if (line.startsWith('## ')) children.push(new Paragraph({ text: line.slice(3), heading: HeadingLevel.HEADING_2, spacing: { before: 200, after: 150 } }));
+            else if (line.startsWith('### ')) children.push(new Paragraph({ text: line.slice(4), heading: HeadingLevel.HEADING_3, spacing: { before: 150, after: 100 } }));
+            else if (line.startsWith('> ')) children.push(new Paragraph({ children: [new TextRun({ text: line.slice(2), italics: true, color: '666666' })], indent: { left: 400 }, spacing: { before: 100, after: 100 } }));
+            else if (line.match(/^[-*+] /)) children.push(new Paragraph({ children: [new TextRun({ text: '• ', bold: true }), new TextRun({ text: line.replace(/^[-*+] /, '') })], indent: { left: 400 }, spacing: { before: 40, after: 40 } }));
+            else if (line.match(/^\d+\. /)) { const num = line.match(/^\d+\./)?.[0] + ' '; children.push(new Paragraph({ children: [new TextRun({ text: num, bold: true }), new TextRun({ text: line.replace(/^\d+\. /, '') })], indent: { left: 400 }, spacing: { before: 40, after: 40 } })); }
+            else if (line.trim() === '') children.push(new Paragraph({ spacing: { before: 60, after: 60 } }));
+            else children.push(new Paragraph({ text: line, spacing: { before: 40, after: 40 } }));
+          }
+          const doc = new Document({ sections: [{ children }] });
+          blob = await Packer.toBlob(doc);
+        } catch {
+          // Fallback: HTML-based .doc (Word opens it fine)
+          const bodyHtml = mdToSimpleHtml(note.content);
+          const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escapeHtml(note.title)}</title><style>body{font-family:Microsoft YaHei,sans-serif;padding:20px;line-height:1.6}h1{border-bottom:2px solid #6c5ce7}</style></head><body><h1>${escapeHtml(note.title)}</h1>${bodyHtml}</body></html>`;
+          blob = new Blob([html], { type: 'application/msword' });
+        }
+        await saveFile(blob, `${note.title || '笔记'}.docx`, 'docx');
+        setExportDone('Word');
+      } catch (e) {
+        console.error('DOCX export failed:', e);
+        setExportDone('导出失败');
+      } finally {
+        setExporting(false);
+      }
     }
   };
 
@@ -328,11 +365,11 @@ ${bodyHtml}
         </div>
 
         {exportDone ? (
-          exportDone === '导出失败' || exportDone === 'Web 模式不支持' ? (
+          exportDone === '导出失败' ? (
             <div style={{ textAlign: 'center', padding: '24px 0' }}>
               <X size={48} style={{ color: 'var(--danger)', marginBottom: 16 }} />
-              <p style={{ color: 'var(--text-muted)', marginBottom: 8 }}>Word 导出失败</p>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{exportDone === 'Web 模式不支持' ? 'Word 导出仅在 Electron 桌面版中可用，请使用其他格式。' : '请确认已安装依赖后重试，或使用其他导出格式。'}</p>
+              <p style={{ color: 'var(--text-muted)', marginBottom: 8 }}>导出失败</p>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>请稍后重试，或使用其他导出格式。</p>
               <div className="modal-footer" style={{ justifyContent: 'center', marginTop: 16 }}>
                 <button className="btn btn-secondary" onClick={() => { setExportDone(null); }}>返回</button>
                 <button className="btn btn-primary" onClick={onClose}>关闭</button>
