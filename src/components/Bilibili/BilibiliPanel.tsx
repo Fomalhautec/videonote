@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { Video, Link as LinkIcon, Loader2, X, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
+import { isCapacitor } from '../../utils/platform';
 
 interface BilibiliPanelProps {
   noteId: string;
@@ -46,7 +47,9 @@ function BilibiliPanel({ noteId }: BilibiliPanelProps) {
       } else {
         const bvidMatch = url.match(/BV[a-zA-Z0-9]+/);
         if (!bvidMatch) throw new Error('无法识别视频ID');
-        const resp = await fetch(`https://api.bilibili.com/x/web-interface/view?bvid=${bvidMatch[0]}`);
+        // Use CORS proxy for browser/ Capacitor webview (Bilibili blocks direct CORS)
+        const proxyUrl = isCapacitor() ? `https://corsproxy.io/?url=${encodeURIComponent('https://api.bilibili.com/x/web-interface/view?bvid=' + bvidMatch[0])}` : `https://api.bilibili.com/x/web-interface/view?bvid=${bvidMatch[0]}`;
+        const resp = await fetch(proxyUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
         const data = await resp.json();
         if (data.code !== 0) throw new Error(data.message || 'API error');
         info = { title: data.data.title, cover: data.data.pic, bvid: data.data.bvid, author: data.data.owner?.name || '', duration: data.data.duration, description: data.data.desc || '' };

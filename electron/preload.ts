@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showSaveDialog: (options: any) => ipcRenderer.invoke('export:save-dialog', options),
   writeFile: (filePath: string, data: string) => ipcRenderer.invoke('export:write-file', filePath, data),
   exportDocx: (data: { title: string; content: string; filePath: string }) => ipcRenderer.invoke('export:docx', data),
+  exportPdf: (data: { title: string; content: string; filePath: string }) => ipcRenderer.invoke('export:pdf', data),
   selectImage: () => ipcRenderer.invoke('file:select-image'),
   selectStorageDir: () => ipcRenderer.invoke('storage:select-dir'),
   changeStoragePath: (newPath: string) => ipcRenderer.invoke('storage:change-path', newPath),

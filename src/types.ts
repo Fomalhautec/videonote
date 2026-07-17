@@ -60,7 +60,8 @@ export interface ElectronAPI {
   openExternal: (url: string) => Promise<void>;
   showSaveDialog: (options: any) => Promise<{ canceled: boolean; filePath?: string }>;
   writeFile: (filePath: string, data: string) => Promise<boolean>;
-  exportDocx: (data: { title: string; content: string; filePath: string }) => Promise<boolean>;
+  exportDocx: (data: { title: string; content: string; filePath: string; videoInfo?: { title?: string; author?: string; bvid?: string; url?: string } }) => Promise<boolean>;
+  exportPdf: (data: { title: string; content: string; filePath: string; videoInfo?: { title?: string; author?: string; bvid?: string; url?: string } }) => Promise<{ success: boolean; error?: string }>;
   selectImage: () => Promise<string | null>;
   selectStorageDir: () => Promise<string | null>;
   changeStoragePath: (newPath: string) => Promise<{ success: boolean; error?: string }>;

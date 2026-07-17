@@ -4,6 +4,7 @@ import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 
 let mainWindow: BrowserWindow | null = null;
+let pdfWindow: BrowserWindow | null = null;
 
 const DEFAULT_DATA_DIR = path.join(app.getPath('userData'), 'videonote-data');
 let DATA_DIR = DEFAULT_DATA_DIR;
@@ -231,8 +232,91 @@ ipcMain.handle('export:write-file', async (_event, filePath: string, data: strin
   return true;
 });
 
+// PDF Export — uses Electron's built-in Chromium printToPDF for perfect rendering
+ipcMain.handle('export:pdf', async (_event, { title, content, filePath, videoInfo }: { title: string; content: string; filePath: string; videoInfo?: { title?: string; author?: string; bvid?: string; url?: string } }) => {
+  const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const mdToSimpleHtml = (text: string) => {
+    let html = '';
+    const lines = text.split('\n');
+    let inUl = false, inOl = false;
+    const flush = () => { if (inUl) { html += '</ul>\n'; inUl = false; } if (inOl) { html += '</ol>\n'; inOl = false; } };
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.startsWith('# ')) { flush(); html += '<h1>' + escapeHtml(line.slice(2)) + '</h1>\n'; }
+      else if (line.startsWith('## ')) { flush(); html += '<h2>' + escapeHtml(line.slice(3)) + '</h2>\n'; }
+      else if (line.startsWith('### ')) { flush(); html += '<h3>' + escapeHtml(line.slice(4)) + '</h3>\n'; }
+      else if (line.startsWith('```')) { flush(); i++; let c = ''; while (i < lines.length && !lines[i].startsWith('```')) { c += escapeHtml(lines[i]) + '\n'; i++; } html += '<pre><code>' + c + '</code></pre>\n'; }
+      else if (line.startsWith('> ')) { flush(); html += '<blockquote>' + escapeHtml(line.slice(2)) + '</blockquote>\n'; }
+      else if (line.match(/^- /)) { if (inOl) { html += '</ol>\n'; inOl = false; } if (!inUl) { html += '<ul>\n'; inUl = true; } html += '<li>' + escapeHtml(line.replace(/^- /, '')) + '</li>\n'; }
+      else if (line.match(/^\d+\. /)) { if (inUl) { html += '</ul>\n'; inUl = false; } if (!inOl) { html += '<ol>\n'; inOl = true; } html += '<li>' + escapeHtml(line.replace(/^\d+\. /, '')) + '</li>\n'; }
+      else if (line.startsWith('---') || line.startsWith('***')) { flush(); html += '<hr>\n'; }
+      else if (line.trim() === '') { flush(); }
+      else { flush(); html += '<p>' + escapeHtml(line).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*(.+?)\*/g, '<em>$1</em>') + '</p>\n'; }
+    }
+    flush();
+    return html;
+  };
+
+  try {
+    const bodyHtml = mdToSimpleHtml(content.replace(/\[toc\]/gi, ''));
+    let videoFooter = '';
+    if (videoInfo?.title) {
+      const parts = [`关联视频: ${escapeHtml(videoInfo.title)}`];
+      if (videoInfo.author) parts.push(`UP主: ${escapeHtml(videoInfo.author)}`);
+      if (videoInfo.bvid) parts.push(`BV号: ${videoInfo.bvid}`);
+      if (videoInfo.url) parts.push(`链接: ${escapeHtml(videoInfo.url)}`);
+      videoFooter = '<hr style="margin-top:16px;"><p style="font-size:11px;color:#888;">' + parts.join(' · ') + '</p>';
+    }
+    const styledHtml = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Microsoft YaHei','PingFang SC','Noto Sans CJK SC','SimSun',sans-serif; padding:20px 24px; color:#333; line-height:1.8; font-size:13px; }
+  h1 { font-size:20px; border-bottom:2px solid #6c5ce7; padding-bottom:6px; margin-bottom:12px; }
+  h2 { font-size:17px; margin:14px 0 6px; } h3 { font-size:14px; margin:12px 0 4px; }
+  p { margin:4px 0; }
+  ul, ol { padding-left:22px; margin:4px 0; }
+  li { margin:2px 0; }
+  pre { background:#f5f5f5; padding:10px; border-radius:4px; font-size:11px; margin:8px 0; white-space:pre-wrap; word-break:break-all; font-family:'Courier New',monospace; }
+  code { background:#f5f5f5; padding:1px 4px; border-radius:3px; font-size:11px; font-family:'Courier New',monospace; }
+  blockquote { border-left:3px solid #6c5ce7; padding-left:10px; margin:6px 0; color:#666; }
+  hr { border:none; border-top:1px solid #ddd; margin:10px 0; }
+  img { max-width:100%; }
+</style></head>
+<body>
+  <h1>${escapeHtml(title || '笔记')}</h1>
+  ${bodyHtml}
+  ${videoFooter}
+</body></html>`;
+
+    // Create hidden window to render HTML and print to PDF
+    if (pdfWindow) { pdfWindow.close(); }
+    pdfWindow = new BrowserWindow({
+      width: 800, height: 600, show: false, webPreferences: { offscreen: true }
+    });
+
+    await pdfWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(styledHtml));
+    await new Promise(r => setTimeout(r, 1000)); // Wait for layout
+
+    const buffer = await pdfWindow.webContents.printToPDF({
+      printBackground: true,
+      preferCSSPageSize: true,
+      margin: { top: '0.6in', bottom: '0.6in', left: '0.8in', right: '0.8in' },
+    });
+
+    pdfWindow.close();
+    pdfWindow = null;
+    fs.writeFileSync(filePath, buffer);
+    return { success: true };
+  } catch (e: any) {
+    if (pdfWindow) { pdfWindow.close(); pdfWindow = null; }
+    return { success: false, error: e.message };
+  }
+});
+
 // DOCX Export (handled in main process where CJS modules work)
-ipcMain.handle('export:docx', async (_event, { title, content, filePath }: { title: string; content: string; filePath: string }) => {
+ipcMain.handle('export:docx', async (_event, { title, content, filePath, videoInfo }: { title: string; content: string; filePath: string; videoInfo?: { title?: string; author?: string; bvid?: string; url?: string } }) => {
   let docx: any;
   try {
     docx = require('docx');
@@ -317,6 +401,16 @@ ipcMain.handle('export:docx', async (_event, { title, content, filePath }: { tit
       } else {
         children.push(new Paragraph({ text: line, spacing: { before: 40, after: 40 } }));
       }
+    }
+
+    // Add video source footer if present
+    if (videoInfo?.title) {
+      const parts = [`关联视频: ${videoInfo.title}`];
+      if (videoInfo.author) parts.push(`UP主: ${videoInfo.author}`);
+      if (videoInfo.bvid) parts.push(`BV号: ${videoInfo.bvid}`);
+      if (videoInfo.url) parts.push(`链接: ${videoInfo.url}`);
+      children.push(new Paragraph({ spacing: { before: 200, after: 200 }, border: { top: { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' } } }));
+      children.push(new Paragraph({ children: [new TextRun({ text: parts.join(' · '), italics: true, color: '888888', size: 18 })] }));
     }
 
     const doc = new Document({ sections: [{ children }] });
