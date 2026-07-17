@@ -6,7 +6,8 @@ import rehypeRaw from 'rehype-raw';
 import {
   Bold, Italic, Heading1, Heading2, Heading3, List, ListOrdered,
   Quote, Code, Link, Image, Eye, Edit3, Split, FileText,
-  Pin, Trash2, Copy, FileDown, Tag, Palette, X, Check
+  Pin, Trash2, Copy, FileDown, Tag, Palette, X, Check,
+  Strikethrough, SquareCheck, Code2, Minus, Table, ListTree
 } from 'lucide-react';
 import BilibiliPanel from '../Bilibili/BilibiliPanel';
 import ExportDialog from '../Export/ExportDialog';
@@ -57,13 +58,19 @@ function Editor() {
     switch (action) {
       case 'bold': insertFormat('**', '**'); break;
       case 'italic': insertFormat('*', '*'); break;
+      case 'strike': insertFormat('~~', '~~'); break;
       case 'h1': insertFormat('# '); break;
       case 'h2': insertFormat('## '); break;
       case 'h3': insertFormat('### '); break;
       case 'ul': insertFormat('- '); break;
       case 'ol': insertFormat('1. '); break;
+      case 'todo': insertFormat('- [ ] '); break;
       case 'quote': insertFormat('> '); break;
       case 'code': insertFormat('```\n', '\n```'); break;
+      case 'inline-code': insertFormat('`', '`'); break;
+      case 'hr': insertFormat('\n---\n'); break;
+      case 'table': insertFormat('\n| 标题1 | 标题2 |\n| --- | --- |\n| 内容1 | 内容2 |\n'); break;
+      case 'toc': insertFormat('\n[toc]\n'); break;
       case 'link': insertFormat('[', '](url)'); break;
       case 'image': handleImageInsert(); break;
     }
@@ -231,6 +238,8 @@ function Editor() {
           <div className="toolbar-group">
             <button className="toolbar-btn" onClick={() => handleToolbarAction('bold')} title="粗体 Ctrl+B"><Bold size={16} /></button>
             <button className="toolbar-btn" onClick={() => handleToolbarAction('italic')} title="斜体 Ctrl+I"><Italic size={16} /></button>
+            <button className="toolbar-btn" onClick={() => handleToolbarAction('strike')} title="删除线"><Strikethrough size={16} /></button>
+            <button className="toolbar-btn" onClick={() => handleToolbarAction('inline-code')} title="行内代码"><Code2 size={16} /></button>
           </div>
           <div className="toolbar-group">
             <button className="toolbar-btn" onClick={() => handleToolbarAction('h1')} title="标题1"><Heading1 size={16} /></button>
@@ -240,8 +249,14 @@ function Editor() {
           <div className="toolbar-group">
             <button className="toolbar-btn" onClick={() => handleToolbarAction('ul')} title="无序列表"><List size={16} /></button>
             <button className="toolbar-btn" onClick={() => handleToolbarAction('ol')} title="有序列表"><ListOrdered size={16} /></button>
+            <button className="toolbar-btn" onClick={() => handleToolbarAction('todo')} title="待办事项"><SquareCheck size={16} /></button>
             <button className="toolbar-btn" onClick={() => handleToolbarAction('quote')} title="引用"><Quote size={16} /></button>
+          </div>
+          <div className="toolbar-group">
             <button className="toolbar-btn" onClick={() => handleToolbarAction('code')} title="代码块"><Code size={16} /></button>
+            <button className="toolbar-btn" onClick={() => handleToolbarAction('hr')} title="分割线"><Minus size={16} /></button>
+            <button className="toolbar-btn" onClick={() => handleToolbarAction('table')} title="插入表格"><Table size={16} /></button>
+            <button className="toolbar-btn" onClick={() => handleToolbarAction('toc')} title="插入目录"><ListTree size={16} /></button>
           </div>
           <div className="toolbar-group">
             <button className="toolbar-btn" onClick={() => handleToolbarAction('link')} title="插入链接"><Link size={16} /></button>

@@ -21,24 +21,78 @@ function ExportDialog({ onClose }: ExportDialogProps) {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   };
 
+  const stripToc = (content: string) => content.replace(/\[toc\]/gi, '');
+
   const mdToSimpleHtml = (text: string) => {
-    let html = text
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/^### (.+)$/gm, '<h3 style="margin:12px 0 6px;font-size:15px;">$1</h3>')
-      .replace(/^## (.+)$/gm, '<h2 style="margin:14px 0 8px;font-size:17px;">$1</h2>')
-      .replace(/^# (.+)$/gm, '<h1 style="margin:16px 0 10px;font-size:20px;border-bottom:2px solid #6c5ce7;padding-bottom:6px;">$1</h1>')
-      .replace(/^> (.+)$/gm, '<blockquote style="border-left:3px solid #6c5ce7;padding-left:12px;margin:8px 0;color:#666;">$1</blockquote>')
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.+?)\*/g, '<em>$1</em>')
-      .replace(/^- (.+)$/gm, '<li style="margin:2px 0;">$1</li>')
-      .replace(/^\d+\. (.+)$/gm, '<li style="margin:2px 0;">$1</li>')
-      .replace(/\n\n/g, '<br/><br/>')
-      .replace(/\n/g, '<br/>');
-    // Handle code blocks
-    html = html.replace(/```[\s\S]*?```/g, (m: string) => {
-      const code = m.replace(/```.*\n/, '').replace(/\n```$/, '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return '<pre style="background:#f5f5f5;padding:10px;border-radius:4px;font-size:10pt;margin:8px 0;"><code>' + code + '</code></pre>';
+    // First extract and protect code blocks
+    let codeBlocks: string[] = [];
+    let processed = text.replace(/```[\s\S]*?```/g, (m: string) => {
+      const code = m.replace(/```.*\n?/, '').replace(/\n?```$/, '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const idx = codeBlocks.length;
+      codeBlocks.push('<pre style="background:#f5f5f5;padding:10px;border-radius:4px;font-size:9pt;margin:8px 0;white-space:pre-wrap;word-break:break-all;"><code>' + code + '</code></pre>');
+      return `%%CODEBLOCK_${idx}%%`;
     });
+
+    // Parse markdown line by line for proper nesting
+    let html = '';
+    const lines = processed.split('\n');
+    let inUl = false;
+    let inOl = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // Restore code blocks
+      if (line.includes('%%CODEBLOCK_')) {
+        if (inUl) { html += '</ul>\n'; inUl = false; }
+        if (inOl) { html += '</ol>\n'; inOl = false; }
+        html += line.replace(/%%CODEBLOCK_(\d+)%%/g, (_, idx) => codeBlocks[parseInt(idx)]) + '\n';
+        continue;
+      }
+
+      if (line.startsWith('# ')) {
+        if (inUl) { html += '</ul>\n'; inUl = false; }
+        if (inOl) { html += '</ol>\n'; inOl = false; }
+        html += '<h1 style="margin:16px 0 10px;font-size:20px;border-bottom:2px solid #6c5ce7;padding-bottom:6px;">' + escapeHtml(line.slice(2)) + '</h1>\n';
+      } else if (line.startsWith('## ')) {
+        if (inUl) { html += '</ul>\n'; inUl = false; }
+        if (inOl) { html += '</ol>\n'; inOl = false; }
+        html += '<h2 style="margin:14px 0 8px;font-size:17px;">' + escapeHtml(line.slice(3)) + '</h2>\n';
+      } else if (line.startsWith('### ')) {
+        if (inUl) { html += '</ul>\n'; inUl = false; }
+        if (inOl) { html += '</ol>\n'; inOl = false; }
+        html += '<h3 style="margin:12px 0 6px;font-size:14px;">' + escapeHtml(line.slice(4)) + '</h3>\n';
+      } else if (line.startsWith('> ')) {
+        if (inUl) { html += '</ul>\n'; inUl = false; }
+        if (inOl) { html += '</ol>\n'; inOl = false; }
+        html += '<blockquote style="border-left:3px solid #6c5ce7;padding-left:10px;margin:6px 0;color:#666;">' + escapeHtml(line.slice(2)) + '</blockquote>\n';
+      } else if (line.match(/^- /)) {
+        if (inOl) { html += '</ol>\n'; inOl = false; }
+        if (!inUl) { html += '<ul>\n'; inUl = true; }
+        html += '<li style="margin:2px 0;">' + escapeHtml(line.replace(/^- /, '')) + '</li>\n';
+      } else if (line.match(/^\d+\. /)) {
+        if (inUl) { html += '</ul>\n'; inUl = false; }
+        if (!inOl) { html += '<ol>\n'; inOl = true; }
+        html += '<li style="margin:2px 0;">' + escapeHtml(line.replace(/^\d+\. /, '')) + '</li>\n';
+      } else if (line.startsWith('---') || line.startsWith('***')) {
+        if (inUl) { html += '</ul>\n'; inUl = false; }
+        if (inOl) { html += '</ol>\n'; inOl = false; }
+        html += '<hr>\n';
+      } else if (line.trim() === '') {
+        if (inUl) { html += '</ul>\n'; inUl = false; }
+        if (inOl) { html += '</ol>\n'; inOl = false; }
+      } else {
+        if (inUl) { html += '</ul>\n'; inUl = false; }
+        if (inOl) { html += '</ol>\n'; inOl = false; }
+        html += '<p style="margin:4px 0;">' + escapeHtml(line)
+          .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\*(.+?)\*/g, '<em>$1</em>') + '</p>\n';
+      }
+    }
+
+    if (inUl) html += '</ul>\n';
+    if (inOl) html += '</ol>\n';
+
     return html;
   };
 
@@ -83,7 +137,7 @@ function ExportDialog({ onClose }: ExportDialogProps) {
     if (!note) return;
     setExporting(true);
     try {
-      const content = `# ${note.title}\n\n${note.content}`;
+      const content = `# ${note.title}\n\n${stripToc(note.content)}`;
       await saveFile(content, `${note.title || '笔记'}.md`, 'md');
       setExportDone('Markdown');
     } catch (e) {
@@ -97,7 +151,7 @@ function ExportDialog({ onClose }: ExportDialogProps) {
     if (!note) return;
     setExporting(true);
     try {
-      const plainText = note.content
+      const plainText = stripToc(note.content)
         .replace(/#{1,6}\s+/g, '')
         .replace(/\*\*(.+?)\*\*/g, '$1')
         .replace(/\*(.+?)\*/g, '$1')
@@ -171,7 +225,7 @@ function ExportDialog({ onClose }: ExportDialogProps) {
     if (!note) return;
     setExporting(true);
     try {
-      const bodyHtml = simpleMarkdownToHtml(note.title, note.content);
+      const bodyHtml = simpleMarkdownToHtml(note.title, stripToc(note.content));
       const htmlContent = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -205,64 +259,93 @@ ${bodyHtml}
     if (!note) return;
     setExporting(true);
     try {
-      // Build HTML content
-      const bodyHtml = mdToSimpleHtml(note.content || '');
-      const htmlContent = `<!DOCTYPE html>
+      const cleanContent = stripToc(note.content || '');
+      const bodyHtml = mdToSimpleHtml(cleanContent);
+
+      // Build HTML with A4 dimensions — 210mm wide = 595px at 72 DPI
+      // Content area has proper margins (60px top/bottom, 56px left/right ≈ 20mm margins)
+      const styledHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head><meta charset="UTF-8">
 <style>
-  body { font-family: 'Microsoft YaHei','PingFang SC','Noto Sans CJK SC',sans-serif; padding:32px; color:#333; line-height:1.8; max-width:600px; margin:0 auto; }
-  h1 { font-size:22px; border-bottom:2px solid #6c5ce7; padding-bottom:8px; margin-bottom:16px; }
-  h2 { font-size:18px; margin:14px 0 8px; } h3 { font-size:15px; margin:12px 0 6px; }
-  p, li { font-size:11pt; } pre { background:#f5f5f5; padding:12px; border-radius:6px; font-size:10pt; overflow-x:auto; }
-  blockquote { border-left:3px solid #6c5ce7; padding-left:12px; margin:8px 0; color:#666; }
-  img { max-width:100%; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Microsoft YaHei','PingFang SC','Noto Sans CJK SC','SimSun',sans-serif;
+    color: #333; line-height: 1.8; font-size: 14px;
+    background: white; width: 595px;
+  }
+  .content {
+    width: 595px;
+    padding: 60px 56px;
+  }
+  h1 { font-size: 22px; border-bottom: 2px solid #6c5ce7; padding-bottom: 8px; margin-bottom: 16px; color: #111; }
+  h2 { font-size: 18px; margin: 16px 0 8px; color: #222; }
+  h3 { font-size: 15px; margin: 14px 0 6px; color: #333; }
+  p { margin: 6px 0; }
+  ul, ol { padding-left: 24px; margin: 6px 0; }
+  li { margin: 3px 0; }
+  pre { background: #f5f5f5; padding: 12px; border-radius: 4px; font-size: 12px; margin: 10px 0; white-space: pre-wrap; word-break: break-all; }
+  code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+  blockquote { border-left: 3px solid #6c5ce7; padding-left: 12px; margin: 8px 0; color: #666; }
+  img { max-width: 100%; height: auto; }
+  hr { border: none; border-top: 1px solid #ddd; margin: 12px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+  th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+  th { background: #f0f0f0; }
 </style></head>
 <body>
-  <h1>${escapeHtml(note.title || '笔记')}</h1>
-  ${bodyHtml}
+  <div class="content">
+    <h1>${escapeHtml(note.title || '笔记')}</h1>
+    ${bodyHtml}
+  </div>
 </body></html>`;
 
-      // Create a hidden container to render HTML
       const container = document.createElement('div');
       container.style.position = 'absolute';
       container.style.left = '-9999px';
       container.style.top = '0';
-      container.style.width = '600px';
-      container.style.background = 'white';
-      container.innerHTML = htmlContent;
+      container.style.width = '595px';
+      container.style.background = '#ffffff';
+      container.style.zIndex = '-1';
+      container.innerHTML = styledHtml;
       document.body.appendChild(container);
 
-      // Wait for fonts to render
-      await new Promise(r => setTimeout(r, 300));
+      await new Promise(r => setTimeout(r, 500));
 
       const html2canvas = (await import('html2canvas')).default;
       const canvas = await html2canvas(container, {
-        scale: 2,
+        scale: 3,
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
+        width: 595,
+        windowWidth: 595,
       });
 
       document.body.removeChild(container);
 
       const JsPDF = (await import('jspdf')).default;
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      const imgWidth = 210; // A4 width in mm
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const imgData = canvas.toDataURL('image/jpeg', 0.92);
+      const pdfWidth = 210;
+      const totalHeight = (canvas.height * pdfWidth) / canvas.width;
+      const pageHeight = 297;
+
       const doc = new JsPDF('p', 'mm', 'a4');
+      const pixelsPerPage = (pageHeight * canvas.width) / pdfWidth;
+      let srcY = 0;
 
-      let heightLeft = imgHeight;
-      let position = 0;
-
-      doc.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-      heightLeft -= 297; // A4 height in mm
-
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        doc.addPage();
-        doc.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-        heightLeft -= 297;
+      while (srcY < canvas.height) {
+        if (srcY > 0) doc.addPage();
+        const cropHeight = Math.min(pixelsPerPage, canvas.height - srcY);
+        const pageCanvas = document.createElement('canvas');
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = cropHeight;
+        const ctx = pageCanvas.getContext('2d')!;
+        ctx.drawImage(canvas, 0, srcY, canvas.width, cropHeight, 0, 0, canvas.width, cropHeight);
+        const pageImgData = pageCanvas.toDataURL('image/jpeg', 0.92);
+        const pageHeightMm = (cropHeight * pdfWidth) / canvas.width;
+        doc.addImage(pageImgData, 'JPEG', 0, 0, pdfWidth, pageHeightMm);
+        srcY += pixelsPerPage;
       }
 
       const blob = doc.output('blob');
@@ -287,7 +370,7 @@ ${bodyHtml}
           filters: [{ name: 'Word Document', extensions: ['docx'] }],
         });
         if (!result.canceled && result.filePath) {
-          await api.exportDocx({ title: note.title, content: note.content, filePath: result.filePath });
+          await api.exportDocx({ title: note.title, content: stripToc(note.content), filePath: result.filePath });
           setExportDone('Word');
         }
       } catch (e) {
@@ -304,7 +387,8 @@ ${bodyHtml}
         try {
           const docxModule = await import('docx');
           const { Document, Packer, Paragraph, TextRun, HeadingLevel, BorderStyle } = docxModule;
-          const lines = note.content.split('\n');
+          const docxContent = stripToc(note.content);
+          const lines = docxContent.split('\n');
           const children: any[] = [new Paragraph({ text: note.title, heading: HeadingLevel.HEADING_1, spacing: { after: 400 } })];
           for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
@@ -327,7 +411,7 @@ ${bodyHtml}
           blob = await Packer.toBlob(doc);
         } catch {
           // Fallback: HTML-based .doc (Word opens it fine)
-          const bodyHtml = mdToSimpleHtml(note.content);
+          const bodyHtml = mdToSimpleHtml(stripToc(note.content));
           const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escapeHtml(note.title)}</title><style>body{font-family:Microsoft YaHei,sans-serif;padding:20px;line-height:1.6}h1{border-bottom:2px solid #6c5ce7}</style></head><body><h1>${escapeHtml(note.title)}</h1>${bodyHtml}</body></html>`;
           blob = new Blob([html], { type: 'application/msword' });
         }

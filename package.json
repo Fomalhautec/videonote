@@ -8,7 +8,10 @@
     "dev": "npx vite",
     "build": "npx tsc && npx vite build",
     "electron:dev": "npx vite --mode electron",
-    "electron:build": "npx tsc && npx vite build --mode electron && npx electron-builder"
+    "electron:build": "npx tsc && npx vite build --mode electron && npx electron-builder",
+    "sync-android": "node scripts/sync-android-version.js && npx cap sync android",
+    "version:patch": "npm version patch && node scripts/sync-android-version.js && git add android/app/build.gradle && git commit --amend --no-edit",
+    "version:minor": "npm version minor && node scripts/sync-android-version.js && git add android/app/build.gradle && git commit --amend --no-edit"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.2",

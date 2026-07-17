@@ -20,6 +20,7 @@ export interface Note {
   tags: string[];
   color: string;
   wordCount: number;
+  deletedAt: string | null;
 }
 
 export interface Folder {
