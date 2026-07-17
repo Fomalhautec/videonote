@@ -1,0 +1,120 @@
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useStore } from '../../store/useStore';
+import {
+  FileText, FolderPlus, Plus, Search, ChevronDown, ChevronRight,
+  Edit2, Trash2, PanelRightClose, PanelRightOpen,
+  BookMarked, Settings, Palette, FolderOpen, Pin, RotateCcw, Copy
+} from 'lucide-react';
+
+function Sidebar() {
+  const {
+    folders, notes, selectedNoteId, selectedFolderId, searchQuery,
+    selectNote, selectFolder, createNote, createFolder, updateNote, updateFolder,
+    deleteFolder, togglePinNote, duplicateNote, deleteNote,
+    permanentlyDeleteNote, restoreNote, emptyTrash,
+    setSearchQuery, sidebarWidth, setSidebarWidth, setShowSettings,
+    sidebarCollapsed, toggleSidebarCollapsed, showTrash, setShowTrash, setNoteColor,
+  } = useStore();
+
+  const [showNewFolderInput, setShowNewFolderInput] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [folderRenaming, setFolderRenaming] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set([...folders.map(f => f.id)]));
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; noteId?: string; folderId?: string } | null>(null);
+  const [showFolderColorPicker, setShowFolderColorPicker] = useState<string | null>(null);
+  const [showNoteColorPicker, setShowNoteColorPicker] = useState<string | null>(null);
+  const [showMoveFolderDialog, setShowMoveFolderDialog] = useState<string | null>(null);
+  const [showMoveNoteDialog, setShowMoveNoteDialog] = useState<string | null>(null);
+
+  const filteredNotes = useStore((s) => s.getFilteredNotes());
+  const FOLDER_COLORS = ['#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c','#3498db','#9b59b6','#e84393','#6c5ce7','#fd79a8','#00b894','#636e72'];
+  const NOTE_COLORS = [
+    { value: '', label: '无' }, { value: '#e74c3c', label: '红' }, { value: '#e67e22', label: '橙' },
+    { value: '#f1c40f', label: '黄' }, { value: '#2ecc71', label: '绿' }, { value: '#1abc9c', label: '青' },
+    { value: '#3498db', label: '蓝' }, { value: '#9b59b6', label: '紫' }, { value: '#e84393', label: '粉' },
+    { value: '#6c5ce7', label: '紫罗兰' }, { value: '#fd79a8', label: '浅粉' },
+  ];
+
+  const buildFolderTree = (parentId: string | null, depth: number = 0) => {
+    return folders
+      .filter((f) => f.parentId === parentId)
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((folder) => {
+        const hasChildren = folders.some((f) => f.parentId === folder.id);
+        const isExpanded = expandedFolders.has(folder.id);
+        const noteCount = notes.filter((n) => n.folderId === folder.id && !n.deletedAt).length;
+        const isActive = selectedFolderId === folder.id && !showTrash;
+        return (
+          <React.Fragment key={folder.id}>
+            <div className={`folder-item ${isActive ? 'active' : ''}`}
+              style={depth ? { paddingLeft: 16 + depth * 20 } : {}}
+              onClick={() => { setShowTrash(false); selectFolder(folder.id); setExpandedFolders(p => { const n = new Set(p); n.add(folder.id); return n; }); }}
+              onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, folderId: folder.id }); }}>
+              <span style={{ cursor: 'pointer', display: 'flex', marginRight: 2 }}
+                onClick={(e) => { e.stopPropagation(); setExpandedFolders(p => { const n = new Set(p); n.has(folder.id) ? n.delete(folder.id) : n.add(folder.id); return n; }); }}>
+                {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              </span>
+              <span className="folder-dot" style={{ background: folder.color }} />
+              {folderRenaming === folder.id ? (
+                <input className="input" style={{ padding: '2px 6px', fontSize: 13 }} value={renameValue} autoFocus
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onBlur={() => { if (renameValue.trim()) updateFolder(folder.id, { name: renameValue.trim() }); setFolderRenaming(null); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && renameValue.trim()) { updateFolder(folder.id, { name: renameValue.trim() }); setFolderRenaming(null); } if (e.key === 'Escape') setFolderRenaming(null); }}
+                  onClick={(e) => e.stopPropagation()} />
+              ) : <span className="folder-name">{folder.name}</span>}
+              <span className="folder-count">{noteCount}</span>
+            </div>
+            {isExpanded && hasChildren && buildFolderTree(folder.id, depth + 1)}
+          </React.Fragment>
+        );
+      });
+  };
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+    const handleMouseMove = (e: MouseEvent) => setSidebarWidth(startWidth + e.clientX - startX);
+    const handleMouseUp = () => { document.removeEventListener('mousemove', handleMouseMove); document.removeEventListener('mouseup', handleMouseUp); };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [sidebarWidth, setSidebarWidth]);
+
+  useEffect(() => { const h = () => setContextMenu(null); document.addEventListener('click', h); return () => document.removeEventListener('click', h); }, []);
+  useEffect(() => { if (sidebarCollapsed) setExpandedFolders(new Set()); }, [sidebarCollapsed]);
+
+  const nt = (id: string | null) => id ? notes.find(n => n.id === id)?.color || '' : '';
+  const fc = (id: string | null) => id ? folders.find(f => f.id === id)?.color || '#6c5ce7' : '#6c5ce7';
+
+  if (sidebarCollapsed) {
+    return (
+      <div className="sidebar sidebar-collapsed">
+        <div className="sidebar-collapsed-top">
+          <button className="sidebar-icon-btn" onClick={() => setShowSettings(true)} title="设置"><Settings size={18} /></button>
+          <button className="sidebar-icon-btn" onClick={toggleSidebarCollapsed} title="展开"><PanelRightOpen size={18} /></button>
+        </div>
+        <div className="sidebar-collapsed-nav">
+          <button className="sidebar-icon-btn" onClick={() => { setShowTrash(false); selectFolder(null); }} title="全部"><FileText size={18} /></button>
+          <span className="sidebar-collapsed-separator" />
+          {folders.filter(f => !f.parentId).map(f => (
+            <button key={f.id} className="sidebar-icon-btn" onClick={() => { setShowTrash(false); selectFolder(f.id); }} title={f.name} style={{ color: f.color }}>
+              <span className="folder-dot" style={{ background: f.color, width: 16, height: 16 }} />
+            </button>
+          ))}
+          <span className="sidebar-collapsed-separator" />
+          <button className="sidebar-icon-btn" onClick={() => setShowTrash(true)} title="回收站"><Trash2 size={18} /></button>
+        </div>
+        <div className="sidebar-collapsed-new">
+          <button className="sidebar-icon-btn" onClick={() => { toggleSidebarCollapsed(); setTimeout(() => createNote(), 50); }} title="新建笔记"><Plus size={18} /></button>
+          <button className="sidebar-icon-btn" onClick={()   toggleSidebarCollapsed(); setTimeout(() => { setShowNewFolderInput(true); }, 50); }} title="新建文件夹"><FolderPlus size={18} /></button>
+        </div>
+      </div>
+    );
+  }
+
+  return null; // truncated, fix in VSCode
+}
+
+export default Sidebar;
