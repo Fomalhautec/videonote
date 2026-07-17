@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Moon, Sun, Monitor, Palette, FolderOpen, Eye, RefreshCw, Check, AlertCircle } from 'lucide-react';
+import { X, Moon, Sun, Monitor, Palette, FolderOpen, Eye, RefreshCw, Check, AlertCircle, BookMarked, Leaf } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 
 interface SettingsDialogProps {
@@ -69,6 +69,12 @@ function SettingsDialog({ onClose }: SettingsDialogProps) {
             </button>
             <button className={`theme-option ${settings.theme === 'system' ? 'active' : ''}`} onClick={() => updateSettings({ theme: 'system' })}>
               <Monitor size={20} /><span>跟随系统</span>
+            </button>
+            <button className={`theme-option ${settings.theme === 'paper' ? 'active' : ''}`} onClick={() => updateSettings({ theme: 'paper' })}>
+              <BookMarked size={20} /><span>米黄纸色</span>
+            </button>
+            <button className={`theme-option ${settings.theme === 'green' ? 'active' : ''}`} onClick={() => updateSettings({ theme: 'green' })}>
+              <Leaf size={20} /><span>绿色护眼</span>
             </button>
           </div>
         </div>

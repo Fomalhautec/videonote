@@ -32,7 +32,7 @@ export interface Folder {
 }
 
 export interface AppSettings {
-  theme: 'dark' | 'light' | 'system';
+  theme: 'dark' | 'light' | 'system' | 'paper' | 'green';
   accentColor: string;
   sidebarWidth: number;
   storagePath: string;

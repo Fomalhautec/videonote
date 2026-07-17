@@ -6,6 +6,16 @@ export function isCapacitor(): boolean {
   return !!((window as any).Capacitor);
 }
 
+export async function fetchImageAsDataUrl(url: string): Promise<string | null> {
+  // Electron: use IPC proxy to download image and return data URL
+  if (window.electronAPI) {
+    return window.electronAPI.fetchCoverAsDataUrl(url);
+  }
+  // Web / Capacitor: return the URL directly with referrerpolicy on img tag
+  // Bilibili CDN serves images to img tags without CORS issues
+  return url;
+}
+
 export async function saveFileViaCapacitor(content: string | Blob, defaultName: string) {
   let base64Data: string;
 

@@ -151,6 +151,20 @@ export const useStore = create<AppState>((set, get) => ({
       r.style.setProperty('--text-primary', '#1a1a2e'); r.style.setProperty('--text-secondary', '#555570');
       r.style.setProperty('--text-muted', '#8888a0'); r.style.setProperty('--border', '#d0d0dd');
       r.style.setProperty('--border-light', '#c0c0d0');
+    } else if (settings.theme === 'paper') {
+      r.style.setProperty('--bg-primary', '#f5f0e8'); r.style.setProperty('--bg-secondary', '#faf6ee');
+      r.style.setProperty('--bg-tertiary', '#f0eadc'); r.style.setProperty('--bg-card', '#f8f3e9');
+      r.style.setProperty('--bg-hover', '#eee6d5'); r.style.setProperty('--bg-active', '#e8ddc8');
+      r.style.setProperty('--text-primary', '#3d3229'); r.style.setProperty('--text-secondary', '#6b5d4f');
+      r.style.setProperty('--text-muted', '#9a8b7a'); r.style.setProperty('--border', '#d6ccbb');
+      r.style.setProperty('--border-light', '#c4b8a4');
+    } else if (settings.theme === 'green') {
+      r.style.setProperty('--bg-primary', '#e8f5e9'); r.style.setProperty('--bg-secondary', '#f1f8f2');
+      r.style.setProperty('--bg-tertiary', '#dcefde'); r.style.setProperty('--bg-card', '#f0f7f0');
+      r.style.setProperty('--bg-hover', '#d5ead7'); r.style.setProperty('--bg-active', '#c8e2cb');
+      r.style.setProperty('--text-primary', '#1b3d22'); r.style.setProperty('--text-secondary', '#3d6b47');
+      r.style.setProperty('--text-muted', '#6f9a79'); r.style.setProperty('--border', '#b8d4bd');
+      r.style.setProperty('--border-light', '#a3c4a9');
     } else {
       r.style.setProperty('--bg-primary', '#0f0f1a'); r.style.setProperty('--bg-secondary', '#1a1a2e');
       r.style.setProperty('--bg-tertiary', '#16213e'); r.style.setProperty('--bg-card', '#1e1e36');

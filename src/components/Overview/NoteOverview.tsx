@@ -2,17 +2,17 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useStore } from '../../store/useStore';
 import { FileText, Pin, Folder as FolderIcon, ChevronRight, Trash2, Palette, FileDown, Copy } from 'lucide-react';
 import ExportDialog from '../Export/ExportDialog';
+import { fetchImageAsDataUrl } from '../../utils/platform';
 
 function CoverImg({ src, alt }: { src: string; alt: string }) {
   const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
   useEffect(() => {
     if (!src) return;
-    const api = window.electronAPI;
-    if (api) { api.fetchCoverAsDataUrl(src).then((d) => { if (d) setResolvedSrc(d); else setResolvedSrc(src); }).catch(() => setResolvedSrc(src)); }
-    else { setResolvedSrc(`https://corsproxy.io/?url=${encodeURIComponent(src)}`); }
+    fetchImageAsDataUrl(src).then((d) => { setResolvedSrc(d || src); }).catch(() => setResolvedSrc(src));
   }, [src]);
   if (!resolvedSrc) return null;
-  return <img src={resolvedSrc} alt={alt} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />;
+  return <img src={resolvedSrc} alt={alt} referrerPolicy="no-referrer" crossOrigin="anonymous"
+    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />;
 }
 
 const NOTE_COLORS = [

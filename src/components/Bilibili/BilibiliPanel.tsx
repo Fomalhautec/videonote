@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { Video, Link as LinkIcon, Loader2, X, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
-import { isCapacitor } from '../../utils/platform';
+import { fetchImageAsDataUrl } from '../../utils/platform';
 
 interface BilibiliPanelProps {
   noteId: string;
@@ -22,16 +22,11 @@ function BilibiliPanel({ noteId }: BilibiliPanelProps) {
   useEffect(() => {
     if (!videoInfo?.cover) { setCoverSrc(null); return; }
     setCoverLoading(true);
-    const api = window.electronAPI;
-    if (api) {
-      api.fetchCoverAsDataUrl(videoInfo.cover)
-        .then((dataUrl) => { if (dataUrl) setCoverSrc(dataUrl); else setCoverSrc(videoInfo.cover); })
-        .catch(() => setCoverSrc(videoInfo.cover))
-        .finally(() => setCoverLoading(false));
-    } else {
-      setCoverSrc(videoInfo.cover);
+    fetchImageAsDataUrl(videoInfo.cover).then((dataUrl) => {
+      if (dataUrl) setCoverSrc(dataUrl);
+      else setCoverSrc(videoInfo.cover);
       setCoverLoading(false);
-    }
+    }).catch(() => { setCoverSrc(videoInfo.cover); setCoverLoading(false); });
   }, [videoInfo?.cover]);
 
   const handleFetch = async () => {
@@ -47,10 +42,22 @@ function BilibiliPanel({ noteId }: BilibiliPanelProps) {
       } else {
         const bvidMatch = url.match(/BV[a-zA-Z0-9]+/);
         if (!bvidMatch) throw new Error('无法识别视频ID');
-        // Use CORS proxy for browser/ Capacitor webview (Bilibili blocks direct CORS)
-        const proxyUrl = isCapacitor() ? `https://corsproxy.io/?url=${encodeURIComponent('https://api.bilibili.com/x/web-interface/view?bvid=' + bvidMatch[0])}` : `https://api.bilibili.com/x/web-interface/view?bvid=${bvidMatch[0]}`;
-        const resp = await fetch(proxyUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-        const data = await resp.json();
+        const apiUrl = `https://api.bilibili.com/x/web-interface/view?bvid=${bvidMatch[0]}`;
+        let data: any;
+        try {
+          // Try Capacitor native HTTP (bypasses CORS on Android WebView)
+          const { CapacitorHttp } = await import('@capacitor/core');
+          const resp = await CapacitorHttp.get({
+            url: apiUrl,
+            headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.bilibili.com' },
+          });
+          data = resp.data;
+        } catch {
+          // Fallback: browser fetch
+          const resp = await fetch(apiUrl, { headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.bilibili.com' } });
+          const text = await resp.text();
+          try { data = JSON.parse(text); } catch { throw new Error('API 响应格式错误: 服务器返回了非 JSON 内容'); }
+        }
         if (data.code !== 0) throw new Error(data.message || 'API error');
         info = { title: data.data.title, cover: data.data.pic, bvid: data.data.bvid, author: data.data.owner?.name || '', duration: data.data.duration, description: data.data.desc || '' };
       }
@@ -116,7 +123,8 @@ function BilibiliPanel({ noteId }: BilibiliPanelProps) {
               <Loader2 size={20} className="spin" style={{ color: 'var(--text-muted)' }} />
             </div>
           ) : coverSrc ? (
-            <img className="bilibili-cover" src={coverSrc} alt={videoInfo.title} onError={() => setCoverSrc(null)} />
+            <img className="bilibili-cover" src={coverSrc} alt={videoInfo.title}
+              referrerPolicy="no-referrer" crossOrigin="anonymous" onError={() => setCoverSrc(null)} />
           ) : (
             <div className="bilibili-cover" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
               <Video size={24} />
